@@ -12,6 +12,10 @@ execute:
 
 library(tidyverse)
 library(gt)
+library(tidybayes)
+library(brms)
+
+x <- read_csv("data/resume.csv", show_col_types = FALSE)
 ```
 
 
@@ -98,32 +102,41 @@ Representativeness, or the lack thereof, concerns two relationship, among the ro
 
 Unconfoundedness means that the treatment assignment is independent of the potential outcomes, when we condition on pre-treatment covariates. A model is confounded if this is not true. Given that they randomly assigned names to resumes, unconfoundedness should be true. But what if the assignment process was not really random? They provide no details on the process. Is it that hard to believe that poorly-paid research assistants might not have bothered to really randomize the assignment of names to resumes?
 
-> Describe in words what the Preceptor Table would look like if we were trying to, instead, predict whether or not someone would get a callback?
 
-The Preceptor Table would look like this. When we predict, we only have one outcome column. We don't care about the counterfactual. We don't care what would have happened if, for example, a white name had been used in resume 1. All we care about is a model which can predict, given information about treatment and other variables, what will happen to a given resume.
 
 ```{r}
-tibble(ID = c("1", "2", "...", "10", "11", "...", "N"),
-       attitude_after_control = c("Yes", "No", "...", "No", "Yes", "...", "Yes"),
-       treatment = c("Black", "White", "...", "Black", "Black", "...", "White")) |>
-  
-  gt() |>
-  tab_header(title = "Preceptor Table") |> 
-  cols_label(ID = md("ID"),
-             attitude_after_control = md("Callback"),
-             treatment = md("Treatment")) |>
-  tab_style(cell_borders(sides = "right"),
-            location = cells_body(columns = c(ID))) |>
-  tab_style(style = cell_text(align = "left", v_align = "middle", size = "large"), 
-            locations = cells_column_labels(columns = c(ID))) |>
-  cols_align(align = "center", columns = everything()) |>
-  cols_align(align = "left", columns = c(ID)) |>
-  fmt_markdown(columns = everything()) |>
-  tab_spanner(label = "Outcome", columns = c(attitude_after_control)) |>
-  tab_spanner(label = "Covariate", columns = c(treatment))
+#| cache: true
+#| error: false
+
+fit_resume <- 
+  brm(formula = call ~ race,
+      data = x,
+      family = bernoulli(),
+      silent = 2,
+      refresh = 0,  
+      seed = 9)
 ```
 
-
+```{r}
+#| message: false
+fit_resume |> 
+  add_epred_draws(newdata = tibble(race = c("black", "white"))) |> 
+  select(race, .epred) |> 
+  ggplot(aes(x = .epred, fill = race)) +
+    geom_histogram(aes(y = after_stat(count/sum(count))),
+                   bins = 100) +
+    labs(title = "Posterior for Callback Rates",
+         subtitle = "Resumes with white-coded names are much more likely to receive callbacks",
+         x = "Probability of Callback",
+         fill = "(Likely) Race of\n Name on Resume") +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.line.y = element_blank()
+    ) +
+    scale_x_continuous(labels = scales::percent_format())
+```
 
 
 
